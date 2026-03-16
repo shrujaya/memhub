@@ -1,4 +1,6 @@
 fastapi
-uvicorn
+uvicorn[standard]
 chromadb
 pydantic
+sentence-transformers
+ollama
