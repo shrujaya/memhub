@@ -4,3 +4,5 @@ chromadb
 pydantic
 sentence-transformers
 ollama
+ag2[openai]
+python-dotenv
