@@ -48,11 +48,7 @@ from chromadb.utils import embedding_functions
 # ── Ollama for local LLM summarization ─────────────────────────────────────────
 # ollama must be running locally (`ollama serve`). We prefer llama3 but fall back
 # to mistral if llama3 is not pulled.
-try:
-    import ollama as ollama_client  # type: ignore
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
+from core.summarization import summarize_content, OLLAMA_AVAILABLE
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -76,8 +72,7 @@ CHROMA_DB_PATH = "./chroma_db"
 WORKING_MEMORY_SUMMARY_THRESHOLD = 2_000   # chars: trigger summarization above this
 LONG_TERM_PROMOTION_THRESHOLD    = 500     # chars: route to ChromaDB above this
 
-# Preferred Ollama models, tried in order
-OLLAMA_MODEL_PREFERENCE = ["llama3", "mistral"]
+# Preferred Ollama models, tried in order (Moved to core/summarization.py)
 
 # ── Embedding Function (local, sentence-transformers) ─────────────────────────
 # sentence-transformers is a free, local alternative to OpenAI Embeddings.
@@ -156,74 +151,8 @@ except Exception as exc:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# POLICY ENGINE — AUTOMATIC SUMMARIZATION
+# POLICY ENGINE — AUTOMATIC SUMMARIZATION (Moved to core/summarization.py)
 # ══════════════════════════════════════════════════════════════════════════════
-
-def _pick_ollama_model() -> Optional[str]:
-    """Return the first available Ollama model from our preference list."""
-    if not OLLAMA_AVAILABLE:
-        return None
-    try:
-        available = {m["name"].split(":")[0] for m in ollama_client.list()["models"]}
-        for preferred in OLLAMA_MODEL_PREFERENCE:
-            if preferred in available:
-                return preferred
-    except Exception as exc:
-        logger.warning("Could not query Ollama model list: %s", exc)
-    return None
-
-
-def summarize_content(text: str) -> str:
-    """
-    Automatic Summarization — The Policy Engine
-    ─────────────────────────────────────────────
-    Compresses `text` into a short paragraph using a locally-running LLM via
-    Ollama. This is a background policy operation triggered when an agent's
-    working memory scratchpad exceeds WORKING_MEMORY_SUMMARY_THRESHOLD chars.
-
-    Why this matters vs LMCache
-    ───────────────────────────
-    LMCache handles eviction at the GPU tensor level — it simply drops KV blocks
-    when the cache is full, with no understanding of content semantics.
-    MemHub's Policy Engine is content-aware: it *compresses* the semantic meaning
-    of an agent's accumulated context before it grows too large to fit in a
-    prompt, preserving the agent's "train of thought" rather than blindly
-    truncating it.
-
-    Falls back gracefully:
-      • If Ollama is not installed → returns original text unchanged.
-      • If model call fails → returns original text with a warning prefix.
-    """
-    model = _pick_ollama_model()
-    if model is None:
-        logger.warning(
-            "Ollama not available or no supported model found; "
-            "skipping summarization."
-        )
-        return text
-
-    prompt = (
-        "You are a concise assistant. Summarize the following agent memory log "
-        "into a single, dense paragraph. Preserve all key facts, decisions, and "
-        "unresolved tasks. Do not add any commentary — only output the summary.\n\n"
-        f"MEMORY LOG:\n{text}\n\nSUMMARY:"
-    )
-
-    try:
-        logger.info("Summarizing working memory using model '%s' …", model)
-        response = ollama_client.chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        summary = response["message"]["content"].strip()
-        logger.info(
-            "Summarization complete: %d chars → %d chars", len(text), len(summary)
-        )
-        return summary
-    except Exception as exc:
-        logger.error("Summarization failed: %s", exc)
-        # Graceful fallback: preserve original content, do not crash the /store call
-        return f"[SUMMARY FAILED — ORIGINAL PRESERVED]\n{text}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
