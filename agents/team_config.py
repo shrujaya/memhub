@@ -1,5 +1,6 @@
 import autogen
 import os
+import ollama
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -45,10 +46,42 @@ user_proxy = autogen.UserProxyAgent(
     code_execution_config={"use_docker": False}
 )
 
-if __name__ == "__main__":
-    print("--- Starting Agent Collaboration Test ---")
+def ensure_model_present(model_name: str):
+    """Ensures the specified Ollama model is available locally, pulling it with a progress bar if not."""
+    try:
+        ollama.show(model_name)
+    except Exception:
+        print(f"--- Model '{model_name}' not found. Pulling... (this may take a few minutes) ---")
+        try:
+            for progress in ollama.pull(model_name, stream=True):
+                status = progress.get('status')
+                total = progress.get('total')
+                completed = progress.get('completed')
+                
+                if total and completed:
+                    percent = (completed / total) * 100
+                    bar_length = 30
+                    filled_length = int(bar_length * completed // total)
+                    bar = '█' * filled_length + '░' * (bar_length - filled_length)
+                    
+                    mb_completed = completed / (1024**2)
+                    mb_total = total / (1024**2)
+                    
+                    print(f"\r|{bar}| {percent:5.1f}% ({mb_completed:6.1f}MB / {mb_total:6.1f}MB) - {status}", end="", flush=True)
+            print(f"\n--- Model '{model_name}' pull complete! ---\n")
+        except Exception as e:
+            print(f"\n❌ Failed to pull model '{model_name}': {e}")
+            print("Make sure the Ollama app is running!\n")
+            return False
+    return True
 
-    # 1. Create a group chat so all agents can see the messages and interact
+if __name__ == "__main__":
+    print("\n--- Starting Agent Collaboration Test ---")
+
+    # Ensure model is downloaded
+    model_name = str(config_list[0]["model"])
+    if not ensure_model_present(model_name):
+        exit(1)
     groupchat = autogen.GroupChat(
         agents=[user_proxy, agent_a, agent_b],
         messages=[],
