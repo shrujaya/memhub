@@ -47,6 +47,7 @@ MemHub provides a two-tier shared memory store for AutoGen / LangGraph agent tea
 - [API Endpoints](#api-endpoints)
 - [Configuration](#configuration)
 - [Running Benchmarks](#running-benchmarks)
+- [Docker Deployment](#docker-deployment)
 
 ---
 
@@ -454,3 +455,172 @@ asyncio.run(BenchmarkSuite().run_all())
 ```
 
 > **Note:** The `demotion_compression` benchmark requires Ollama to be running for LLM-based summarisation. All other benchmarks run without an LLM.
+
+---
+
+## Docker Deployment
+
+MemHub ships with a `Dockerfile` and `docker-compose.yml` for deploying the **server** on a remote machine while running **clients** (agents, scripts, notebooks) separately from any other machine.
+
+### Architecture
+
+```
+┌───────────────────────────────────────────┐
+│          Server Machine (Docker)          │
+│                                           │
+│  ┌─────────────┐    ┌──────────────────┐  │
+│  │  memhub     │    │  ollama          │  │
+│  │  (FastAPI)  │◄──►│  (local LLM)     │  │
+│  │  :8000      │    │  :11434          │  │
+│  └──────┬──────┘    └──────────────────┘  │
+│         │  volumes: memhub-data,          │
+│         │           ollama-models         │
+└─────────┼─────────────────────────────────┘
+          │  HTTP (port 8000)
+          ▼
+┌─────────────────────┐
+│   Client Machine    │
+│   agents/tools.py   │
+│   client_example.py │
+│   notebooks, etc.   │
+└─────────────────────┘
+```
+
+### 1. Deploy the server
+
+On the server machine:
+
+```bash
+# Clone the repo
+git clone <repo-url>
+cd memhub
+
+# Start MemHub + Ollama
+docker compose up -d
+
+# Pull an LLM model into the Ollama container
+docker exec memhub-ollama ollama pull llama3
+
+# Verify
+curl http://localhost:8000/v1/health
+```
+
+Both services start automatically on reboot (`restart: unless-stopped`).
+
+### 2. Customise with environment variables
+
+Override defaults via a `.env` file next to `docker-compose.yml`:
+
+```bash
+# .env
+MEMHUB_PORT=8000
+OLLAMA_PORT=11434
+WORKERS=2
+LOG_LEVEL=info
+MEMHUB_DISABLE_AUTH=0
+MEMHUB_CORS_ORIGINS=*
+```
+
+### 3. Enable GPU (NVIDIA)
+
+If the server has an NVIDIA GPU, uncomment the `deploy` block in `docker-compose.yml` under the `ollama` service:
+
+```yaml
+ollama:
+  ...
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+```
+
+Requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+
+### 4. Run the client remotely
+
+On the **client machine**, you only need `requests` (no Docker required):
+
+```bash
+pip install requests
+```
+
+Set the `MEMHUB_SERVER` environment variable to point at the server:
+
+```bash
+export MEMHUB_SERVER=http://<server-ip>:8000
+```
+
+#### Option A: Use the example client
+
+```bash
+python client_example.py
+```
+
+This script demonstrates health checks, storing memories, and retrieving them.
+
+#### Option B: Use the agent tools directly
+
+```python
+import os
+os.environ["MEMHUB_BASE_URL"] = "http://<server-ip>:8000/v1"
+
+from agents.tools import store_memory, query_team_memory, check_memhub_health
+
+check_memhub_health()
+
+store_memory(
+    agent_id="my-agent",
+    content="The experiment results show a 15% improvement.",
+    namespace="shared",
+    tags=["experiment"],
+)
+
+results = query_team_memory(
+    agent_id="my-agent",
+    query="experiment results",
+    include_shared=True,
+)
+print(results)
+```
+
+#### Option C: Plain curl
+
+```bash
+# Store
+curl -X POST http://<server-ip>:8000/v1/store \
+  -H "Content-Type: application/json" \
+  -H "X-Agent-ID: agent-01" \
+  -d '{"agent_id": "agent-01", "content": "Important finding.", "namespace": "shared"}'
+
+# Retrieve
+curl -X POST http://<server-ip>:8000/v1/retrieve \
+  -H "Content-Type: application/json" \
+  -H "X-Agent-ID: agent-01" \
+  -d '{"agent_id": "agent-01", "query": "important", "top_k": 5}'
+```
+
+### Docker commands reference
+
+```bash
+docker compose up -d              # Start all services
+docker compose up -d memhub       # Start server only (bring your own LLM)
+docker compose logs -f memhub     # Tail server logs
+docker compose ps                 # Check running containers
+docker compose down               # Stop everything
+docker compose down -v            # Stop and delete all data volumes
+docker compose build --no-cache   # Rebuild after code changes
+```
+
+### Data persistence
+
+Two named Docker volumes are used:
+
+| Volume | Container path | Contents |
+|---|---|---|
+| `memhub-data` | `/data/` | `memhub.db` (SQLite) + `chroma_db/` (ChromaDB) |
+| `ollama-models` | `/root/.ollama/` | Downloaded LLM model weights |
+
+Data survives `docker compose down` and container rebuilds. Use `docker compose down -v` to wipe everything.
