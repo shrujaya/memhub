@@ -10,8 +10,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-RESULTS_DIR="${RESULTS_DIR:-eval/results}"
-OUT_DIR="${OUT_DIR:-eval/charts}"
+export RESULTS_DIR="${RESULTS_DIR:-eval/results}"
+export OUT_DIR="${OUT_DIR:-eval/charts}"
 
 # ── Optional virtualenv ───────────────────────────────────────────────────────
 if [[ -f "$REPO_ROOT/.venv/bin/activate" ]]; then
@@ -28,12 +28,14 @@ import sys
 sys.path.insert(0, ".")
 from eval.benchmark_tasks import BenchmarkSuite
 import json, pathlib
+import os
 
 async def main():
-    suite = BenchmarkSuite(output_dir="'"$RESULTS_DIR"'")
+    results_dir = os.environ.get("RESULTS_DIR", "eval/results")
+    suite = BenchmarkSuite(output_dir=results_dir)
     results = await suite.run_all()
     for r in results:
-        out = pathlib.Path("'"$RESULTS_DIR"'") / f"{r.task_name}.json"
+        out = pathlib.Path(results_dir) / f"{r.task_name}.json"
         data = {
             "run_id":  r.task_name,
             "passed":  r.passed,

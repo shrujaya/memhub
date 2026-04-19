@@ -354,7 +354,7 @@ async def demotion_compression(
         )
         compression_pct = (
             100 * (1 - result.tokens_after / max(result.tokens_before, 1))
-            if result.needs_update if hasattr(result, "needs_update") else result.tokens_after < tokens_before
+            if (result.needs_update if hasattr(result, "needs_update") else result.tokens_after < tokens_before)
             else 0.0
         )
         passed = result.tokens_after < tokens_before

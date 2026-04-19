@@ -1,0 +1,39 @@
+{
+  "run_id": "multi_agent_shared_collab",
+  "passed": false,
+  "notes": [
+    "4 agents each stored 1 shared fact.",
+    "Total cross-agent reads: 4 (expected \u2265 12, passed=False)."
+  ],
+  "error": null,
+  "summary": {
+    "run_id": "multi_agent_shared_collab_4agents",
+    "total_operations": 8,
+    "total_tokens": 71,
+    "elapsed_seconds": 0.006,
+    "ops_per_second": 1384.78,
+    "latency_p50": {
+      "store": 0.022,
+      "retrieve": 0.365
+    },
+    "latency_p90": {
+      "store": 0.049,
+      "retrieve": 0.487
+    },
+    "latency_p99": {
+      "store": 0.049,
+      "retrieve": 0.487
+    },
+    "latency_mean": {
+      "store": 0.026,
+      "retrieve": 0.383
+    },
+    "tier1_hits": 4,
+    "tier2_hits": 0,
+    "tier1_hit_rate": 1.0,
+    "tokens_before_demotion": 0,
+    "tokens_after_demotion": 0,
+    "compression_pct": 0.0,
+    "error_count": 0
+  }
+}

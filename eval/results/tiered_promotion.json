@@ -1,0 +1,35 @@
+{
+  "run_id": "tiered_promotion",
+  "passed": true,
+  "notes": [
+    "Seeded Tier-2 chunk 'dc269e1b-0fa8-4099-851a-34449b5cd887' with access_count=3.",
+    "Chunk in Tier-1 after promotion: True, in promoted_ids: True, passed=True."
+  ],
+  "error": null,
+  "summary": {
+    "run_id": "tiered_promotion",
+    "total_operations": 1,
+    "total_tokens": 0,
+    "elapsed_seconds": 5.298,
+    "ops_per_second": 0.19,
+    "latency_p50": {
+      "policy": 4.765
+    },
+    "latency_p90": {
+      "policy": 4.765
+    },
+    "latency_p99": {
+      "policy": 4.765
+    },
+    "latency_mean": {
+      "policy": 4.765
+    },
+    "tier1_hits": 0,
+    "tier2_hits": 0,
+    "tier1_hit_rate": 0.0,
+    "tokens_before_demotion": 0,
+    "tokens_after_demotion": 0,
+    "compression_pct": 0.0,
+    "error_count": 0
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "run_id": "long_session_eviction_fifo",
+  "passed": true,
+  "notes": [
+    "Stored 60 memories (1920 tokens total, budget=2000).",
+    "Eviction (FIFO): 0 rows removed, 1920 \u2192 1920 tokens, passed=True."
+  ],
+  "error": null,
+  "summary": {
+    "run_id": "long_session_eviction_fifo",
+    "total_operations": 61,
+    "total_tokens": 1920,
+    "elapsed_seconds": 0.01,
+    "ops_per_second": 6288.12,
+    "latency_p50": {
+      "store": 0.017,
+      "policy": 2.261
+    },
+    "latency_p90": {
+      "store": 0.024,
+      "policy": 2.261
+    },
+    "latency_p99": {
+      "store": 0.058,
+      "policy": 2.261
+    },
+    "latency_mean": {
+      "store": 0.019,
+      "policy": 2.261
+    },
+    "tier1_hits": 0,
+    "tier2_hits": 0,
+    "tier1_hit_rate": 0.0,
+    "tokens_before_demotion": 1920,
+    "tokens_after_demotion": 1920,
+    "compression_pct": 0.0,
+    "error_count": 0
+  }
+}
