@@ -15,7 +15,7 @@ When you run a team of LLM-powered agents (via AutoGen, LangGraph, CrewAI, etc.)
 MemHub solves all three by acting as a **centralised memory service** that sits between the agents and their LLM calls:
 
 ```
-┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+┌────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
 │Orchestrator│  │Researcher│  │ Analyst  │  │  Critic  │
 └─────┬──────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘
       │               │             │             │
