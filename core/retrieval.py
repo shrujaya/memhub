@@ -435,9 +435,14 @@ class MemoryRetriever:
             }
 
         try:
+            collection_size = self._collection.count()
+            if collection_size == 0:
+                logger.debug("Tier-2 collection is empty; skipping search.")
+                return []
+
             raw = self._collection.query(
                 query_texts=[query],
-                n_results=min(n_results, self._collection.count()),
+                n_results=min(n_results, collection_size),
                 where=where_filter,
                 include=["documents", "metadatas", "distances"],
             )

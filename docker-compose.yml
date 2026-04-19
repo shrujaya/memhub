@@ -1,11 +1,16 @@
 # MemHub — Docker Compose
-# Starts the MemHub API server and (optionally) an Ollama LLM sidecar.
+# Starts the MemHub API server.
+# Uses Ollama running on the HOST machine (not containerised).
 #
 # Usage:
-#   docker compose up -d              # start everything
-#   docker compose up -d memhub       # server only (bring your own LLM)
+#   docker compose up -d              # start MemHub server
+#   docker compose up -d --build      # rebuild and start
 #   docker compose logs -f memhub     # tail logs
 #   docker compose down               # stop everything
+#
+# Ollama must already be running on the host:
+#   ollama serve &
+#   ollama pull llama3
 
 services:
   # ── MemHub API Server ────────────────────────────────────────────────────
@@ -27,11 +32,12 @@ services:
       - MEMHUB_CORS_ORIGINS=${MEMHUB_CORS_ORIGINS:-*}
       - WORKERS=${WORKERS:-1}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      # Point summarisation at the Ollama sidecar
-      - MEMHUB_LLM_BASE_URL=http://ollama:11434/v1
-    depends_on:
-      ollama:
-        condition: service_started
+      # Point at Ollama running on the host machine.
+      # "host.docker.internal" resolves to the host's IP from inside Docker.
+      - MEMHUB_LLM_BASE_URL=http://host.docker.internal:11434/v1
+    extra_hosts:
+      # Required on Linux for host.docker.internal to work
+      - "host.docker.internal:host-gateway"
     networks:
       - memhub-net
     healthcheck:
@@ -42,34 +48,8 @@ services:
       start_period: 15s
       retries: 3
 
-  # ── Ollama LLM Sidecar ──────────────────────────────────────────────────
-  # Provides the local OpenAI-compatible endpoint for memory summarisation.
-  # Remove this service if you're running Ollama on the host or using a
-  # cloud LLM endpoint — just set MEMHUB_LLM_BASE_URL accordingly.
-  ollama:
-    image: ollama/ollama:latest
-    container_name: memhub-ollama
-    restart: unless-stopped
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      # Persist downloaded models across restarts
-      - ollama-models:/root/.ollama
-    networks:
-      - memhub-net
-    # Uncomment below to enable GPU passthrough (NVIDIA):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
 volumes:
   memhub-data:
-    driver: local
-  ollama-models:
     driver: local
 
 networks:
