@@ -214,6 +214,7 @@ class MemoryRetriever:
                 query=query,
                 allowed_namespaces=allowed_namespaces,
                 limit=k * CHROMA_FETCH_MULTIPLIER,
+                include_shared=include_shared,
             )
 
         if tier_filter is None or tier_filter == MemoryTier.TIER2:
@@ -222,6 +223,7 @@ class MemoryRetriever:
                 query=query,
                 allowed_namespaces=allowed_namespaces,
                 n_results=k * CHROMA_FETCH_MULTIPLIER,
+                include_shared=include_shared,
             )
 
         # Merge, deduplicate, and re-rank
@@ -309,6 +311,7 @@ class MemoryRetriever:
         query: str,
         allowed_namespaces: List[str],
         limit: int,
+        include_shared: bool = False,
     ) -> List[RetrievalResult]:
         """
         Keyword search over Tier-1 working memory using SQLite LIKE.
@@ -330,11 +333,15 @@ class MemoryRetriever:
             query:               Raw query string.
             allowed_namespaces:  Namespaces the caller is permitted to read.
             limit:               Maximum rows to evaluate.
+            include_shared:      If True, also search shared-namespace rows
+                                 from all agents (cross-agent collaboration).
 
         Returns:
             Scored list of :class:`RetrievalResult`.
         """
         ns_placeholders = ",".join("?" * len(allowed_namespaces))
+
+        # Query 1: the agent's own rows in allowed namespaces
         rows = self._db.execute(
             f"""
             SELECT id, agent_id, content, created_at, last_accessed,
@@ -347,6 +354,27 @@ class MemoryRetriever:
             """,
             (agent_id, *allowed_namespaces, limit),
         ).fetchall()
+
+        # Query 2: shared-namespace rows from OTHER agents (cross-agent)
+        if include_shared:
+            shared_rows = self._db.execute(
+                """
+                SELECT id, agent_id, content, created_at, last_accessed,
+                       access_count, namespace
+                  FROM working_memory
+                 WHERE agent_id != ?
+                   AND namespace = 'shared'
+                 ORDER BY last_accessed DESC
+                 LIMIT ?
+                """,
+                (agent_id, limit),
+            ).fetchall()
+            # Deduplicate by id (agent's own rows take priority)
+            seen_ids = {r[0] for r in rows}
+            for r in shared_rows:
+                if r[0] not in seen_ids:
+                    rows.append(r)
+                    seen_ids.add(r[0])
 
         query_terms = set(query.lower().split())
         now = time.time()
@@ -399,6 +427,7 @@ class MemoryRetriever:
         query: str,
         allowed_namespaces: List[str],
         n_results: int,
+        include_shared: bool = False,
     ) -> List[RetrievalResult]:
         """
         Semantic top-k vector search over Tier-2 long-term memory (ChromaDB).
@@ -414,13 +443,26 @@ class MemoryRetriever:
             query:               Natural-language query for embedding.
             allowed_namespaces:  Namespaces the caller may access.
             n_results:           Number of Tier-2 candidates to fetch.
+            include_shared:      If True, also match shared-namespace records
+                                 from any agent (cross-agent collaboration).
 
         Returns:
             Scored list of :class:`RetrievalResult`.
         """
         # Build ChromaDB WHERE filter (namespace ACL + agent scope)
-        if len(allowed_namespaces) == 1:
+        if include_shared:
+            # Cross-agent: own private rows OR any agent's shared rows
             where_filter: Dict[str, Any] = {
+                "$or": [
+                    {"$and": [
+                        {"agent_id": {"$eq": agent_id}},
+                        {"namespace": {"$eq": "private"}},
+                    ]},
+                    {"namespace": {"$eq": "shared"}},
+                ]
+            }
+        elif len(allowed_namespaces) == 1:
+            where_filter = {
                 "$and": [
                     {"agent_id": {"$eq": agent_id}},
                     {"namespace": {"$eq": allowed_namespaces[0]}},

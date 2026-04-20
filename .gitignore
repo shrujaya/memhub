@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Databases
+*.db
+*.sqlite3
+
+# ChromaDB
+chroma_db/
+
+# Evaluation results & charts
+eval/results/
+eval/charts/
+eval/results/memhub/
+eval/results/baseline/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store

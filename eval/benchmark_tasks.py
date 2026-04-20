@@ -30,6 +30,7 @@ Running the full suite
 from __future__ import annotations
 
 import logging
+import json
 import sqlite3
 import time
 import uuid
@@ -297,7 +298,7 @@ async def long_session_eviction(
 
 
 async def demotion_compression(
-    n_old_memories: int = 30,
+    n_old_memories: int = 80,
     min_age_secs: int = 0,  # Set to 0 so all rows are eligible in tests
 ) -> BenchmarkResult:
     """
@@ -445,27 +446,47 @@ class BenchmarkSuite:
         output_dir: Directory to write JSON result files to.
     """
 
-    def __init__(self, output_dir: str = "eval/results") -> None:
+    def __init__(
+        self,
+        output_dir: str = "eval/results",
+        use_policies: bool = True,
+    ) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.use_policies = use_policies
 
-    async def run_all(self) -> List[BenchmarkResult]:
+    async def run_all(self, subdir: Optional[str] = None) -> List[BenchmarkResult]:
         """
         Execute all benchmark tasks and return their results.
         Results are also stored as JSON files in ``output_dir``.
         """
-        logger.info("Starting MemHub benchmark suite…")
+        target_dir = self.output_dir
+        if subdir:
+            target_dir = target_dir / subdir
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Starting MemHub benchmark suite (policies=%s)…", self.use_policies)
         results: List[BenchmarkResult] = []
 
+        # If policies are disabled, we skip the policy-specific benchmarks
         tasks = [
             ("single_agent_recall",       single_agent_recall()),
             ("multi_agent_shared_collab", multi_agent_shared_collab()),
-            ("eviction_lru",              long_session_eviction(EvictionStrategy.LRU)),
-            ("eviction_fifo",             long_session_eviction(EvictionStrategy.FIFO)),
-            ("eviction_lfu",              long_session_eviction(EvictionStrategy.LFU)),
-            ("demotion_compression",      demotion_compression()),
-            ("tiered_promotion",          tiered_promotion()),
         ]
+
+        if self.use_policies:
+            tasks.extend([
+                ("eviction_lru",              long_session_eviction(EvictionStrategy.LRU)),
+                ("eviction_fifo",             long_session_eviction(EvictionStrategy.FIFO)),
+                ("eviction_lfu",              long_session_eviction(EvictionStrategy.LFU)),
+                ("demotion_compression",      demotion_compression()),
+                ("tiered_promotion",          tiered_promotion()),
+            ])
+        else:
+            # Baseline versions of long session (no eviction)
+            tasks.extend([
+                ("long_session_no_policy",    long_session_eviction(EvictionStrategy.LRU, n_memories=80)),
+            ])
 
         for name, coro in tasks:
             logger.info("  Running: %s", name)
@@ -482,8 +503,16 @@ class BenchmarkSuite:
                 )
 
             results.append(result)
-            out_path = self.output_dir / f"{name}.json"
+            out_path = target_dir / f"{name}.json"
             result.summary  # trigger computation
+            out_path.write_text(json.dumps({
+                "run_id":  result.task_name,
+                "passed":  result.passed,
+                "notes":   result.notes,
+                "error":   result.error,
+                "summary": result.summary.__dict__,
+            }, indent=2))
+            
             logger.info(
                 "  Result: %s — %s",
                 name,

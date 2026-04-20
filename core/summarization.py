@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # LLM Endpoint configuration (assuming OpenAI-compatible API like vLLM or Ollama)
 LLM_ENDPOINT = "http://localhost:11434/v1/chat/completions"
-DEFAULT_MODEL = "llama2" # Configure with your specific local model name
+DEFAULT_MODEL = "llama3" # Configure with your specific local model name
 
 def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
     """
