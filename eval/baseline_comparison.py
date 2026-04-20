@@ -14,14 +14,21 @@ import chromadb
 # ── Baseline Implementation (No MemHub) ───────────────────────────────────────
 
 class VanillaMemory:
-    """A simple single-tier memory system with no lifecycle policies."""
-    def __init__(self):
+    """A simple single-tier memory system that caps at 2000 tokens (simulating a fixed context limit)."""
+    def __init__(self, cap=2000):
         self.db = sqlite3.connect(":memory:")
         self.db.execute("CREATE TABLE memory (id TEXT, content TEXT, created_at REAL)")
+        self.cap = cap
         
     async def store(self, content: str):
+        # Insert the new memory
         self.db.execute("INSERT INTO memory VALUES (?, ?, ?)", (str(uuid.uuid4()), content, time.time()))
         self.db.commit()
+
+        # Enforce the context cap by dropping the oldest memories (Simulating loss of context)
+        while self.get_total_tokens() > self.cap:
+            self.db.execute("DELETE FROM memory WHERE rowid = (SELECT MIN(rowid) FROM memory)")
+            self.db.commit()
 
     async def retrieve(self, query: str):
         # Simple keyword search

@@ -120,10 +120,10 @@ async def single_agent_recall(
     Pass condition: at least ``top_k`` results returned, all with score > 0.
     """
     task = "single_agent_recall"
-    collector = MetricsCollector(run_id=f"{task}_{n_facts}facts")
-    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     db = _make_ephemeral_db()
     chroma = _make_ephemeral_chroma()
+    collector = MetricsCollector(run_id=f"{task}_{n_facts}facts")
+    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     notes: List[str] = []
 
     # ── Store phase ───────────────────────────────────────────────────────────
@@ -174,9 +174,9 @@ async def multi_agent_shared_collab(n_agents: int = 4) -> BenchmarkResult:
     Pass condition: every agent can retrieve the facts of all other agents.
     """
     task = "multi_agent_shared_collab"
-    collector = MetricsCollector(run_id=f"{task}_{n_agents}agents")
     db = _make_ephemeral_db()
     chroma = _make_ephemeral_chroma()
+    collector = MetricsCollector(run_id=f"{task}_{n_agents}agents")
     notes: List[str] = []
 
     agent_ids = [f"bench-agent-{uuid.uuid4().hex[:6]}" for _ in range(n_agents)]
@@ -235,10 +235,10 @@ async def long_session_eviction(
     Pass condition: post-eviction token count ≤ WORKING_MEMORY_TOKEN_BUDGET.
     """
     task = f"long_session_eviction_{strategy.value}"
-    collector = MetricsCollector(run_id=task)
-    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     db = _make_ephemeral_db()
     chroma = _make_ephemeral_chroma()
+    collector = MetricsCollector(run_id=task)
+    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     notes: List[str] = []
 
     # Store many memories to blow past the budget
@@ -310,10 +310,10 @@ async def demotion_compression(
     If it's unreachable, the test records a degraded result but does not fail.
     """
     task = "demotion_compression"
-    collector = MetricsCollector(run_id=task)
-    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     db = _make_ephemeral_db()
     chroma = _make_ephemeral_chroma()
+    collector = MetricsCollector(run_id=task)
+    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     notes: List[str] = []
 
     content_template = (
@@ -386,10 +386,10 @@ async def tiered_promotion(
     Pass condition: the chunk's ID appears in working_memory after promotion.
     """
     task = "tiered_promotion"
-    collector = MetricsCollector(run_id=task)
-    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     db = _make_ephemeral_db()
     chroma = _make_ephemeral_chroma()
+    collector = MetricsCollector(run_id=task)
+    agent_id = f"bench-agent-{uuid.uuid4().hex[:8]}"
     notes: List[str] = []
 
     # Manually seed a Tier-2 chunk above the hit threshold

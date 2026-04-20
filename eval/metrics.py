@@ -264,12 +264,16 @@ class MetricsCollector:
             if self._compression_before > 0 else 0.0
         )
 
+        # Latency-based throughput (more accurate for micro-benchmarks)
+        total_latency_sec = sum(r.latency_ms for r in self._records) / 1000.0
+        ops_per_sec = round(total / max(total_latency_sec, 0.0001), 2)
+
         return RunSummary(
             run_id=self.run_id,
             total_operations=total,
             total_tokens=sum(r.tokens for r in self._records),
             elapsed_seconds=round(elapsed, 3),
-            ops_per_second=round(total / max(elapsed, 0.001), 2),
+            ops_per_second=ops_per_sec,
             latency_p50=p50,
             latency_p90=p90,
             latency_p99=p99,

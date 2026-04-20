@@ -15,6 +15,22 @@ from eval.benchmark_tasks import BenchmarkSuite
 async def main():
     print("=== STARTING MEMHUB VS BASELINE COMPARISON ===")
     
+    # 0. Warmup (Eliminate Cold-Start bias for ChromaDB/SQLite/Tokenizer)
+    print("\n[0/3] Warming up libraries...")
+    from eval.benchmark_tasks import _make_ephemeral_db, _make_ephemeral_chroma
+    from core.summarization import count_tokens
+    db = _make_ephemeral_db()
+    chroma = _make_ephemeral_chroma()
+    count_tokens("warmup string")
+    
+    # Force ChromaDB/SQLite to actually execute a search to warm up internal caches/HNSW
+    from core.retrieval import MemoryRetriever
+    retriever = MemoryRetriever(db=db, chroma=chroma)
+    dummy_id = "warmup-id"
+    db.execute("INSERT INTO working_memory (id, agent_id, content, created_at, last_accessed) VALUES (?, ?, ?, ?, ?)",
+               (dummy_id, "warmup-agent", "warmup content", 0, 0))
+    await retriever.retrieve(agent_id="warmup-agent", query="warmup query")
+    
     # 1. Run Baseline (Policies OFF)
     print("\n[1/3] Running Baseline (No MemHub Policies)...")
     baseline_suite = BenchmarkSuite(output_dir="eval/results/baseline", use_policies=False)
