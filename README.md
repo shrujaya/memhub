@@ -71,6 +71,8 @@ source .venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
+# Optional: Install charting tools for benchmarking
+pip install matplotlib pandas seaborn
 ```
 
 ### 4. Set up a local LLM (required for summarisation)
@@ -180,11 +182,14 @@ memhub/
 │   ├── __init__.py
 │   ├── benchmark_tasks.py    # Multi-step benchmark scenarios
 │   ├── metrics.py            # Latency, throughput, and token usage tracking
-│   └── visualize.py          # Chart generation (matplotlib)
+│   ├── visualize.py          # Chart generation (matplotlib)
+│   ├── baseline_comparison.py # Side-by-side vanilla vs MemHub test
+│   └── run_comparison.py     # Comparative runner and chart generator
 │
 └── scripts/                  # Utilities
     ├── run_server.sh         # Start the FastAPI service
-    └── run_evals.sh          # Run benchmarks and generate charts
+    ├── run_evals.sh          # Run benchmarks and generate charts
+    └── run_comparison.sh     # Run comparative analysis suite
 ```
 
 ---
@@ -445,6 +450,11 @@ bash scripts/run_evals.sh
 # 3. View results
 ls eval/results/     # JSON files per task
 ls eval/charts/      # PNG charts
+
+# 4. Comparative Analysis (MemHub vs Vanilla)
+# Runs the suite twice (policies ON vs OFF) and generates comparison charts
+export PYTHONPATH=$PYTHONPATH:.
+python eval/run_comparison.py
 
 # Or run from Python:
 python -c "

@@ -189,7 +189,7 @@ The Analyst can now retrieve it:
 ```python
 query_team_memory(agent_id="analyst", query="ACME revenue", include_shared=True)
 ```
-The Researcher's private reasoning steps remain invisible to the Analyst.
+The Researcher's private reasoning steps remain invisible to the Analyst. MemHub enforces this by filtering Tier-1 and Tier-2 results: if `include_shared=True`, it returns `private` records for the requesting agent PLUS all `shared` records from any agent.
 
 ---
 
@@ -273,6 +273,10 @@ Each task creates an **isolated in-memory environment** (no server needed):
 | Token Compression | Before/after paired bars with reduction % — proves summarisation works |
 | Tier Hit Rates | Stacked Tier-1/Tier-2 bars — shows where data actually lives |
 | Policy Comparison | LRU vs FIFO vs LFU sweep latency — helps choose a strategy |
+
+#### 8. Baseline Comparison (Comparative Mode)
+
+A specialized benchmarking mode that runs the suite with policies **disabled**. This serves as the "Control" group to measure the absolute benefits of MemHub's tiered architecture against a standard flat-file memory system. It visualizes the "sawtooth" token compression pattern that prevents context overflow.
 
 ---
 

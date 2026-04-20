@@ -227,6 +227,20 @@ This runs seven benchmark tasks (in-memory, no server needed) and generates char
 | `tier_hit_rates.png` | Tier-1 vs Tier-2 hit distribution |
 | `policy_comparison.png` | LRU vs FIFO vs LFU sweep cost |
 
+### Comparative Benchmarking (MemHub vs Baseline)
+
+To see the real-world impact of MemHub policies compared to a standard "flat" memory system, run the comparative suite:
+
+```bash
+export PYTHONPATH=$PYTHONPATH:.
+python eval/run_comparison.py
+```
+
+This generates:
+- `comparison_tokens.png`: Shows how MemHub prevents context overflow.
+- `comparison_latency.png`: Compares retrieval speeds.
+- `comparison_throughput.png`: Measures system overhead.
+
 ---
 
 ## Using MemHub
@@ -307,6 +321,7 @@ Each agent will:
 | `401 Missing X-Agent-ID` | No header in request | Add `-H "X-Agent-ID: <agent>"` to curl |
 | `403 Forbidden` | Agent lacks namespace access | Auto-registration handles this; check `agent_acl` table |
 | Summarisation returns original text | Ollama not running | `ollama serve &` or `docker exec memhub-ollama ollama list` |
+| Summarisation fails silently | Incorrect model name | Ensure `core/summarization.py` is set to `llama3` (matches pulled model) |
 | `ModuleNotFoundError: tiktoken` | Deps not installed | `pip install -r requirements.txt` |
 | Docker build fails on `chromadb` | Needs gcc | Already handled in Dockerfile; try `docker compose build --no-cache` |
 | Benchmarks fail on `demotion_compression` | No LLM available | Expected if Ollama is off; other benchmarks still pass |
