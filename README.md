@@ -84,7 +84,7 @@ MemHub calls a local, OpenAI-compatible LLM endpoint for memory summarisation. I
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Pull a model
-ollama pull llama3
+ollama pull llama3.1
 ```
 
 Ollama serves on `http://localhost:11434` by default — no extra configuration needed.

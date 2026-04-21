@@ -60,7 +60,7 @@ ollama --version
 ### Step 5 — Pull a model
 
 ```bash
-ollama pull llama3
+ollama pull llama3.1
 ```
 
 This downloads ~4 GB. Wait for it to finish.
@@ -136,7 +136,7 @@ memhub-ollama     Up
 ### Step 3 — Pull a model into the Ollama container
 
 ```bash
-docker exec memhub-ollama ollama pull llama3
+docker exec memhub-ollama ollama pull llama3.1
 ```
 
 ### Step 4 — Verify

@@ -67,7 +67,7 @@ def _llm_config(model: Optional[str] = None) -> Dict[str, Any]:
     return {
         "config_list": [
             {
-                "model": model or os.getenv("MEMHUB_LLM_MODEL", "llama3"),
+                "model": model or os.getenv("MEMHUB_LLM_MODEL", "llama3.1"),
                 "base_url": os.getenv(
                     "MEMHUB_LLM_BASE_URL", "http://localhost:11434/v1"
                 ),

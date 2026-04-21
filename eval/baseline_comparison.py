@@ -14,18 +14,17 @@ import chromadb
 # ── Baseline Implementation (No MemHub) ───────────────────────────────────────
 
 class VanillaMemory:
-    """A simple single-tier memory system that caps at 2000 tokens (simulating a fixed context limit)."""
-    def __init__(self, cap=2000):
+    """A naive single-tier memory system with a hard context-window cap. Once the
+    cap is reached, the oldest entries are dropped to make room for new writes —
+    simulating the fixed-context behaviour of an LLM with no tiered memory."""
+    def __init__(self, cap: int = WORKING_MEMORY_TOKEN_BUDGET):
         self.db = sqlite3.connect(":memory:")
         self.db.execute("CREATE TABLE memory (id TEXT, content TEXT, created_at REAL)")
         self.cap = cap
-        
+
     async def store(self, content: str):
-        # Insert the new memory
         self.db.execute("INSERT INTO memory VALUES (?, ?, ?)", (str(uuid.uuid4()), content, time.time()))
         self.db.commit()
-
-        # Enforce the context cap by dropping the oldest memories (Simulating loss of context)
         while self.get_total_tokens() > self.cap:
             self.db.execute("DELETE FROM memory WHERE rowid = (SELECT MIN(rowid) FROM memory)")
             self.db.commit()
@@ -132,8 +131,8 @@ async def run_comparison(n_steps=50):
     
     # Chart 1: Token Usage
     plt.subplot(1, 2, 1)
-    plt.plot(df['step'], df['vanilla_tokens'], label='No MemHub (Linear Growth)')
-    plt.plot(df['step'], df['memhub_tokens'], label='With MemHub (Compressed)')
+    plt.plot(df['step'], df['vanilla_tokens'], label='No MemHub (Capped at Budget)')
+    plt.plot(df['step'], df['memhub_tokens'], label='With MemHub (Tier-1 + Tier-2)')
     plt.axhline(y=WORKING_MEMORY_TOKEN_BUDGET, color='r', linestyle='--', label='Tier-1 Budget')
     plt.title("Memory Usage Over Time (Tokens)")
     plt.xlabel("Interaction Step")

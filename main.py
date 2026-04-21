@@ -46,8 +46,8 @@ import chromadb
 from chromadb.utils import embedding_functions
 
 # ── Ollama for local LLM summarization ─────────────────────────────────────────
-# ollama must be running locally (`ollama serve`). We prefer llama3 but fall back
-# to mistral if llama3 is not pulled.
+# ollama must be running locally (`ollama serve`). We prefer llama3.1 but fall back
+# to mistral if llama3.1 is not pulled.
 from core.summarization import summarize_content, OLLAMA_AVAILABLE
 
 # ── Logging ────────────────────────────────────────────────────────────────────
