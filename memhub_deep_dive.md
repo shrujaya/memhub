@@ -135,36 +135,56 @@ The policy walks rows in order, removing them one-by-one until the token budget 
 
 ### Feature 2: Hybrid Retrieval (Keyword + Semantic Search)
 
-When an agent calls `/retrieve`, MemHub searches **both tiers simultaneously** and merges the results:
+When an agent calls `/retrieve`, MemHub searches Tier-1 first, computes a confidence score, and only falls through to Tier-2 if that score falls below a threshold:
 
 ```
 Agent query: "What is ACME's Q2 revenue?"
        │
-  ┌────┴─────────────────────────────┐
-  ▼                                  ▼
-Tier-1 (SQLite)                Tier-2 (ChromaDB)
-SQL LIKE keyword scan          Cosine similarity on embeddings
-  │                                  │
-  │ Score = keyword_hits             │ Score = 1 / (1 + distance)
-  │       + recency_decay            │
-  │       + log(access_count)        │
-  └────────────┬─────────────────────┘
-               ▼
-        _merge_and_rank()
-        normalize each tier to [0,1]
-        weight: Tier-1 × 0.6, Tier-2 × 0.4
-        deduplicate (Tier-1 wins on ID collision)
-        sort descending, take top-k
-               │
-               ▼
-        Increment access_count on all results
-        (feeds PromotionPolicy)
-               │
-               ▼
-        Return ranked MemoryItem list
+       ▼
+Tier-1 (SQLite)
+SQL LIKE keyword scan
+Score = keyword_hits + recency_decay + log(access_count)
+       │
+       ▼
+_tier1_confidence(results, query)
+C = 0.7 × coverage + 0.3 × avg_recency
+
+  coverage    = matched query terms across top-k / total query terms
+  avg_recency = mean of 2^(-age / 3600) across top-k results
+
+       │
+  ┌────┴──────────────────────────┐
+  │ C ≥ 0.8                       │ C < 0.8
+  │ short-circuit                 │ fall through
+  ▼                               ▼
+  skip Tier-2             Tier-2 (ChromaDB)
+  (tier2_skipped=True)    Cosine similarity on embeddings
+                          Score = 1 / (1 + distance)
+                                  │
+  ┌─────────────────────────────┘
+  ▼
+_merge_and_rank()
+normalize each tier to [0,1]
+weight: Tier-1 × 0.6, Tier-2 × 0.4
+deduplicate (Tier-1 wins on ID collision)
+sort descending, take top-k
+       │
+       ▼
+Increment access_count on all results
+(feeds PromotionPolicy)
+       │
+       ▼
+Return ranked MemoryItem list
+(includes confidence score and tier2_skipped flag)
 ```
 
-**Why a 60/40 Tier-1 weighting?** Tier-1 memories are the agent's active context — they're more immediately relevant. Tier-2 results are valuable but represent archived history. The weights can be tuned.
+**Why a confidence-based short-circuit?** Tier-2 vector search costs 5–50ms. When Tier-1 already holds a high-coverage, recent answer, paying that cost adds latency without improving result quality. The short-circuit makes the latency saving provable rather than incidental.
+
+**How confidence is defined:** Coverage measures whether every query term appears somewhere in the top-k Tier-1 results — a collective check, not per-result. Recency is averaged over the same result set using the same exponential decay as the retrieval scorer. The 70/30 weighting (α = 0.7) favours coverage because a fresh but partially-matching result is less useful than a complete match that is moderately old.
+
+**Why 0.8 as the threshold?** At θ = 0.8 the system requires roughly full keyword coverage with at least moderately recent results before skipping Tier-2. A threshold of 1.0 would only short-circuit on perfect matches; 0.6 would skip Tier-2 too aggressively for partial queries.
+
+**Why a 60/40 Tier-1 weighting in the merge?** Tier-1 memories are the agent's active context — they're more immediately relevant. Tier-2 results are valuable but represent archived history. The weights can be tuned.
 
 **Why normalize before merging?** Tier-1 scores are additive (keyword count + recency + frequency) and unbounded. Tier-2 scores are cosine similarities in (0, 1]. Without normalization, one tier would dominate.
 

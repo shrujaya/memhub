@@ -19,12 +19,23 @@ Retrieval Flow
 ──────────────
                        agent /retrieve request
                                │
-              ┌────────────────┴────────────────┐
-              ▼                                 ▼
-     Tier-1 search (SQLite)          Tier-2 search (ChromaDB)
-     LIKE / FTS keyword match         top-k cosine similarity
-              │                                 │
-              └────────────────┬────────────────┘
+                               ▼
+                    Tier-1 search (SQLite)
+                    LIKE / FTS keyword match
+                               │
+                               ▼
+                    _tier1_confidence(results, query)
+                    C = α·coverage + (1−α)·avg_recency
+                               │
+               ┌───────────────┴───────────────┐
+         C ≥ θ (0.8)                      C < θ (0.8)
+         short-circuit                    fall through
+               │                               │
+               │                               ▼
+               │                  Tier-2 search (ChromaDB)
+               │                  top-k cosine similarity
+               │                               │
+               └───────────────┬───────────────┘
                                ▼
                     _merge_and_rank()
                     (dedup → score → top-n)
@@ -53,6 +64,7 @@ into Tier 1 on the next policy sweep.
 from __future__ import annotations
 
 import logging
+import math
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -78,6 +90,12 @@ CHROMA_FETCH_MULTIPLIER: int = 3
 # Recency decay half-life in seconds (used in hybrid scoring).
 # A memory becomes half as relevant after this many seconds of no access.
 RECENCY_HALF_LIFE_SECS: float = 3_600.0  # 1 hour
+
+# Tier-1 confidence short-circuit parameters.
+# C = TIER1_CONFIDENCE_ALPHA * coverage + (1 - TIER1_CONFIDENCE_ALPHA) * avg_recency
+# If C >= TIER1_CONFIDENCE_THRESHOLD, Tier-2 search is skipped entirely.
+TIER1_CONFIDENCE_ALPHA: float = 0.7       # weight for keyword coverage vs recency
+TIER1_CONFIDENCE_THRESHOLD: float = 0.8  # minimum confidence to skip Tier-2
 
 
 # ── Data models ──────────────────────────────────────────────────────────────
@@ -124,12 +142,15 @@ class RetrievalResponse:
     The full response object returned to the API layer.
 
     Attributes:
-        agent_id:    The agent that issued the query.
-        query:       The original query string.
-        results:     Ranked list of :class:`RetrievalResult` objects.
-        tier1_hits:  Number of results sourced from Tier 1.
-        tier2_hits:  Number of results sourced from Tier 2.
-        latency_ms:  Wall-clock time for the full retrieval in milliseconds.
+        agent_id:      The agent that issued the query.
+        query:         The original query string.
+        results:       Ranked list of :class:`RetrievalResult` objects.
+        tier1_hits:    Number of results sourced from Tier 1.
+        tier2_hits:    Number of results sourced from Tier 2.
+        latency_ms:    Wall-clock time for the full retrieval in milliseconds.
+        tier2_skipped: True if Tier-2 search was skipped due to high Tier-1
+                       confidence, False otherwise.
+        confidence:    The computed Tier-1 confidence score (0.0–1.0).
     """
     agent_id: str
     query: str
@@ -137,6 +158,8 @@ class RetrievalResponse:
     tier1_hits: int = 0
     tier2_hits: int = 0
     latency_ms: float = 0.0
+    tier2_skipped: bool = False
+    confidence: float = 0.0
 
 
 # ── MemoryRetriever ───────────────────────────────────────────────────────────
@@ -204,10 +227,12 @@ class MemoryRetriever:
         if include_shared:
             allowed_namespaces.append("shared")
 
-        # Fan out to tiers (skip if filtered)
         tier1_results: List[RetrievalResult] = []
         tier2_results: List[RetrievalResult] = []
+        tier2_skipped = False
+        confidence = 0.0
 
+        # Always search Tier-1 first
         if tier_filter is None or tier_filter == MemoryTier.TIER1:
             tier1_results = self._search_tier1(
                 agent_id=agent_id,
@@ -217,7 +242,9 @@ class MemoryRetriever:
                 include_shared=include_shared,
             )
 
-        if tier_filter is None or tier_filter == MemoryTier.TIER2:
+        # Tier-2: search unless Tier-1 confidence is sufficient to short-circuit.
+        # An explicit tier_filter=TIER2 always bypasses the confidence check.
+        if tier_filter == MemoryTier.TIER2:
             tier2_results = self._search_tier2(
                 agent_id=agent_id,
                 query=query,
@@ -225,6 +252,23 @@ class MemoryRetriever:
                 n_results=k * CHROMA_FETCH_MULTIPLIER,
                 include_shared=include_shared,
             )
+        elif tier_filter is None:
+            confidence = self._tier1_confidence(tier1_results, query)
+            if confidence >= TIER1_CONFIDENCE_THRESHOLD:
+                tier2_skipped = True
+                logger.info(
+                    "Tier-2 short-circuit for agent '%s': "
+                    "confidence=%.3f >= threshold=%.3f",
+                    agent_id, confidence, TIER1_CONFIDENCE_THRESHOLD,
+                )
+            else:
+                tier2_results = self._search_tier2(
+                    agent_id=agent_id,
+                    query=query,
+                    allowed_namespaces=allowed_namespaces,
+                    n_results=k * CHROMA_FETCH_MULTIPLIER,
+                    include_shared=include_shared,
+                )
 
         # Merge, deduplicate, and re-rank
         merged = self._merge_and_rank(tier1_results, tier2_results, top_k=k)
@@ -241,16 +285,21 @@ class MemoryRetriever:
             tier1_hits=sum(1 for r in merged if r.tier == MemoryTier.TIER1),
             tier2_hits=sum(1 for r in merged if r.tier == MemoryTier.TIER2),
             latency_ms=round(elapsed_ms, 2),
+            tier2_skipped=tier2_skipped,
+            confidence=round(confidence, 4),
         )
 
         logger.info(
             "Retrieval for agent '%s': query=%r, top_k=%d, "
-            "tier1_hits=%d, tier2_hits=%d, latency=%.2fms",
+            "tier1_hits=%d, tier2_hits=%d, confidence=%.3f, "
+            "tier2_skipped=%s, latency=%.2fms",
             agent_id,
             query[:60],
             k,
             response.tier1_hits,
             response.tier2_hits,
+            confidence,
+            tier2_skipped,
             elapsed_ms,
         )
         return response
@@ -302,6 +351,53 @@ class MemoryRetriever:
         # Update last_accessed for all returned rows
         self._touch_tier1_rows([r.id for r in results])
         return results
+
+    # ── Tier-1 confidence scoring ─────────────────────────────────────────────
+
+    def _tier1_confidence(
+        self, results: List[RetrievalResult], query: str
+    ) -> float:
+        """
+        Compute a confidence score for the Tier-1 result set.
+
+        The score combines two signals:
+
+          coverage   — fraction of query terms collectively present across
+                       the top-k Tier-1 results (1.0 = all terms matched).
+
+          avg_recency — mean exponential recency decay over the result set,
+                        using the same half-life as the retrieval scorer.
+
+        Final score:
+            C = TIER1_CONFIDENCE_ALPHA * coverage
+              + (1 - TIER1_CONFIDENCE_ALPHA) * avg_recency
+
+        Returns a value in [0.0, 1.0]. Returns 0.0 if there are no results
+        or the query is empty, ensuring Tier-2 is always consulted in those
+        cases.
+        """
+        if not results or not query.strip():
+            return 0.0
+
+        query_terms = set(query.lower().split())
+        if not query_terms:
+            return 0.0
+
+        # Coverage: fraction of query terms found in any top-k result
+        covered = sum(
+            1 for t in query_terms
+            if any(t in r.content.lower() for r in results)
+        )
+        coverage = covered / len(query_terms)
+
+        # Recency: average exponential decay over result set
+        now = time.time()
+        avg_recency = sum(
+            2 ** (-(now - r.last_accessed) / RECENCY_HALF_LIFE_SECS)
+            for r in results
+        ) / len(results)
+
+        return TIER1_CONFIDENCE_ALPHA * coverage + (1 - TIER1_CONFIDENCE_ALPHA) * avg_recency
 
     # ── Tier-1 search (SQLite) ────────────────────────────────────────────────
 
@@ -395,7 +491,6 @@ class MemoryRetriever:
             recency_score = 2 ** (-age_secs / RECENCY_HALF_LIFE_SECS)
 
             # Frequency score: log-scaled access count
-            import math
             freq_score = math.log1p(access_count) / 10.0
 
             final_score = keyword_score + recency_score + freq_score

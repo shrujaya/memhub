@@ -287,6 +287,8 @@ async def retrieve_memories(
         tier2_hits=response.tier2_hits,
         total_results=len(items),
         latency_ms=response.latency_ms,
+        tier2_skipped=response.tier2_skipped,
+        confidence=response.confidence,
     )
 
 

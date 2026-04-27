@@ -264,6 +264,14 @@ class RetrieveResponse(BaseModel):
     tier2_hits: int = Field(..., description="Number of results from Tier-2 (ChromaDB).")
     total_results: int = Field(..., description="Total results returned.")
     latency_ms: float = Field(..., description="Server-side retrieval latency in ms.")
+    tier2_skipped: bool = Field(
+        default=False,
+        description="True if Tier-2 search was skipped due to high Tier-1 confidence.",
+    )
+    confidence: float = Field(
+        default=0.0,
+        description="Tier-1 confidence score (0.0–1.0) computed before the short-circuit decision.",
+    )
 
 
 class PolicySummary(BaseModel):

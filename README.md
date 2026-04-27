@@ -1,5 +1,7 @@
 # MemHub
 
+> For setup instructions, running benchmarks, and evaluation scripts, see [runbook.md](runbook.md).
+
 **Centralized Memory-as-a-Service for Multi-Agent Systems**
 
 MemHub provides a two-tier shared memory store for AutoGen / LangGraph agent teams, with automatic eviction, demotion, promotion, and LLM-based summarisation policies.
@@ -276,7 +278,8 @@ Also defines shared data models: `MemoryRecord`, `PolicyResult`, `EvictionStrate
 
 - **`MemoryRetriever`** — Unified search interface:
   - **Tier-1 search**: SQLite `LIKE` scan with a hybrid scoring formula: keyword match bonus + exponential recency decay + log-scaled access frequency.
-  - **Tier-2 search**: ChromaDB `query_texts` cosine similarity, with distance-to-similarity conversion (`1 / (1 + distance)`).
+  - **`_tier1_confidence()`**: After Tier-1 returns, computes a confidence score `C = 0.7 × coverage + 0.3 × avg_recency`. Coverage is the fraction of query terms found collectively across top-k results; recency is the mean exponential decay over the result set. If `C ≥ 0.8`, Tier-2 is skipped entirely (`tier2_skipped=True`).
+  - **Tier-2 search**: ChromaDB `query_texts` cosine similarity, with distance-to-similarity conversion (`1 / (1 + distance)`). Only runs if Tier-1 confidence is below the threshold.
   - **`_merge_and_rank()`**: Normalises each tier's scores to `[0,1]`, applies tier weights (60% Tier-1, 40% Tier-2), deduplicates (Tier-1 wins on ID collision), and returns sorted top-k.
   - **`_increment_access_counts()`**: Bumps `access_count` and `last_accessed` for all returned results in both SQLite and ChromaDB metadata. This is the **promotion hook** — when a Tier-2 chunk reaches the hit threshold, `PromotionPolicy` will promote it on the next sweep.
 - **`retrieve_working_memory()`** — Full dump of all Tier-1 memories for an agent (used by DemotionPolicy).
@@ -409,7 +412,7 @@ All endpoints are versioned under `/v1` and require the `X-Agent-ID` header.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/store` | Store a memory in Tier-1 working memory |
-| `POST` | `/v1/retrieve` | Hybrid keyword + semantic search across both tiers |
+| `POST` | `/v1/retrieve` | Tier-1 keyword search with confidence-gated Tier-2 fallback |
 | `POST` | `/v1/policies/run` | Manually run Promote → Demote → Evict policies |
 | `GET`  | `/v1/memory/{id}` | Fetch a single memory by UUID |
 | `GET`  | `/v1/health` | Service health check |
