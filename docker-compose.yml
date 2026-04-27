@@ -1,0 +1,57 @@
+# MemHub — Docker Compose
+# Starts the MemHub API server.
+# Uses Ollama running on the HOST machine (not containerised).
+#
+# Usage:
+#   docker compose up -d              # start MemHub server
+#   docker compose up -d --build      # rebuild and start
+#   docker compose logs -f memhub     # tail logs
+#   docker compose down               # stop everything
+#
+# Ollama must already be running on the host:
+#   ollama serve &
+#   ollama pull llama3
+
+services:
+  # ── MemHub API Server ────────────────────────────────────────────────────
+  memhub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: memhub-server
+    restart: unless-stopped
+    ports:
+      - "${MEMHUB_PORT:-8000}:8000"
+    volumes:
+      # Persist SQLite + ChromaDB across container restarts
+      - memhub-data:/data
+    environment:
+      - MEMHUB_DB_PATH=/data/memhub.db
+      - MEMHUB_CHROMA_PATH=/data/chroma_db
+      - MEMHUB_DISABLE_AUTH=${MEMHUB_DISABLE_AUTH:-0}
+      - MEMHUB_CORS_ORIGINS=${MEMHUB_CORS_ORIGINS:-*}
+      - WORKERS=${WORKERS:-1}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Point at Ollama running on the host machine.
+      # "host.docker.internal" resolves to the host's IP from inside Docker.
+      - MEMHUB_LLM_BASE_URL=http://host.docker.internal:11434/v1
+    extra_hosts:
+      # Required on Linux for host.docker.internal to work
+      - "host.docker.internal:host-gateway"
+    networks:
+      - memhub-net
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  memhub-data:
+    driver: local
+
+networks:
+  memhub-net:
+    driver: bridge

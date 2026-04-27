@@ -12,14 +12,14 @@ except ImportError:
     OLLAMA_AVAILABLE = False
 
 # Preferred Ollama models, tried in order
-OLLAMA_MODEL_PREFERENCE = ["llama3", "mistral"]
+OLLAMA_MODEL_PREFERENCE = ["llama3.1", "mistral"]
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 # LLM Endpoint configuration (assuming OpenAI-compatible API like vLLM or Ollama)
 LLM_ENDPOINT = "http://localhost:11434/v1/chat/completions"
-DEFAULT_MODEL = "llama2" # Configure with your specific local model name
+DEFAULT_MODEL = "llama3.1" # Configure with your specific local model name
 
 def count_tokens(text: str, model: str = "gpt-3.5-turbo") -> int:
     """
