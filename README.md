@@ -11,23 +11,16 @@ MemHub provides a two-tier shared memory store for AutoGen / LangGraph agent tea
 | **1** | SQLite | Working memory — fast keyword search, immediate agent context |
 | **2** | ChromaDB | Long-term memory — semantic vector search, archived knowledge |
 
-```
-         ┌─────────────────────────────────────┐
-         │        Agent Team (AutoGen)          │
-         │  Orchestrator · Researcher · Analyst │
-         └──────────────┬──────────────────────┘
-                        │  REST API
-                        ▼
-         ┌──────────────────────────────────────┐
-         │          MemHub API (FastAPI)         │
-         │   /store · /retrieve · /policies/run  │
-         └────────┬─────────────────┬───────────┘
-                  │                 │
-         ┌────────▼──────┐  ┌──────▼────────┐
-         │  Tier 1       │  │  Tier 2        │
-         │  SQLite       │  │  ChromaDB      │
-         │  (working)    │  │  (long-term)   │
-         └───────────────┘  └───────────────┘
+```mermaid
+flowchart TD
+    agents["Agent Team (AutoGen)\nOrchestrator · Researcher · Analyst · Critic"]
+    api["MemHub API (FastAPI)\n/store · /retrieve · /policies/run"]
+    t1["Tier 1 — SQLite\nWorking Memory"]
+    t2["Tier 2 — ChromaDB\nLong-Term Memory"]
+
+    agents -->|REST API| api
+    api --> t1
+    api --> t2
 ```
 
 **Python 3.12+**
@@ -477,26 +470,17 @@ MemHub ships with a `Dockerfile` and `docker-compose.yml` for deploying the **se
 
 ### Architecture
 
-```
-┌───────────────────────────────────────────┐
-│          Server Machine (Docker)          │
-│                                           │
-│  ┌─────────────┐    ┌──────────────────┐  │
-│  │  memhub     │    │  ollama          │  │
-│  │  (FastAPI)  │◄──►│  (local LLM)     │  │
-│  │  :8000      │    │  :11434          │  │
-│  └──────┬──────┘    └──────────────────┘  │
-│         │  volumes: memhub-data,          │
-│         │           ollama-models         │
-└─────────┼─────────────────────────────────┘
-          │  HTTP (port 8000)
-          ▼
-┌─────────────────────┐
-│   Client Machine    │
-│   agents/tools.py   │
-│   client_example.py │
-│   notebooks, etc.   │
-└─────────────────────┘
+```mermaid
+flowchart TD
+    subgraph server["Server Machine (Docker)"]
+        memhub["memhub (FastAPI)\n:8000"]
+        ollama["ollama (local LLM)\n:11434"]
+        memhub <-->|"volumes: memhub-data, ollama-models"| ollama
+    end
+
+    client["Client Machine\nagents/tools.py · client_example.py · notebooks"]
+
+    server -->|"HTTP (port 8000)"| client
 ```
 
 ### 1. Deploy the server
